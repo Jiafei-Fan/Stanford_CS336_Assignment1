@@ -660,13 +660,31 @@ def run_train_bpe(
         # Compute BPE merges from global_counts
         merges: list[tuple[bytes, bytes]] = []
         pair_counts: Counter[tuple[bytes, bytes], int] = Counter()
+        firsttime = True
         while len(vocab) < vocab_size:
-            pair_counts.clear()
-            for token_tuple, count in global_counts.items():
-                # Get all adjacent pairs in token_tuple
-                for i in range(len(token_tuple) - 1):
-                    pair = (token_tuple[i], token_tuple[i + 1])
-                    pair_counts[pair] += count
+            # pair_counts.clear()
+            if firsttime:
+                for token_tuple, count in global_counts.items():
+                    # Get all adjacent pairs in token_tuple
+                    for i in range(len(token_tuple) - 1):
+                        pair = (token_tuple[i], token_tuple[i + 1])
+                        pair_counts[pair] += count
+                firsttime = False
+            else:
+                for old_tu, new_tu, cnt in updated_tuples_set:
+                    # subtract old pairs
+                    for j in range(len(old_tu) - 1):
+                        p = (old_tu[j], old_tu[j + 1])
+                        newv = pair_counts[p] - cnt
+                        if newv:
+                            pair_counts[p] = newv
+                        else:
+                            del pair_counts[p]
+
+                    # add new pairs
+                    for j in range(len(new_tu) - 1):
+                        p = (new_tu[j], new_tu[j + 1])
+                        pair_counts[p] += cnt
             max_count = max(pair_counts.values())
             ties: list[tuple[bytes, bytes]] = [pair for pair, c in pair_counts.items() if c == max_count]
             lexicographically_max_pair: tuple[bytes, bytes] = max(ties)
@@ -675,12 +693,15 @@ def run_train_bpe(
             vocab[len(vocab)] = lexicographically_max_pair[0] + lexicographically_max_pair[1]
             # Update global_counts by merging the selected pair
             merged_first, merged_second = lexicographically_max_pair
-            merged_token = merged_first + merged_second
+            merged_token: bytes = merged_first + merged_second
             updated_counts: Counter[tuple[bytes], int] = Counter()
+            updated_tuples_set: set[tuple[tuple[bytes, ...], tuple[bytes, ...], int]] = set()
+
             for token_tuple, count in global_counts.items():
                 merged_sequence: list[bytes] = []
                 i = 0
-                while i < len(token_tuple):
+                modified = False
+                while i < len(token_tuple):    
                     if (
                         i + 1 < len(token_tuple)
                         and token_tuple[i] == merged_first
@@ -688,10 +709,14 @@ def run_train_bpe(
                     ):
                         merged_sequence.append(merged_token)
                         i += 2
+                        modified = True
                     else:
                         merged_sequence.append(token_tuple[i])
                         i += 1
-                updated_counts[tuple(merged_sequence)] += count
+                new_tuple = tuple(merged_sequence)
+                updated_counts[new_tuple] += count
+                if modified:
+                    updated_tuples_set.add((token_tuple, new_tuple, count))
             global_counts = updated_counts
 
         return vocab, merges
