@@ -11,6 +11,7 @@ from torch import Tensor
 from cs336_basics.pretokenization_example import find_chunk_boundaries
 import regex as re
 from collections import Counter
+import multiprocessing
 
 
 def run_linear(
@@ -564,7 +565,7 @@ def get_tokenizer(
     """
     raise NotImplementedError
 
-def pretokenize(
+def _pretokenize(
     text: str,
     special_tokens: list[str]
 ) -> dict[tuple[bytes], int]:
@@ -582,8 +583,9 @@ def pretokenize(
     if not special_tokens:
         raise AssertionError("special_tokens must be a non-empty list of strings")
     delim = "|".join(re.escape(tok) for tok in special_tokens)
+    # # split a string to list of substrings, also remove the delimiters such as <|endoftext|>
     text_parts = re.split(delim, text)
-
+    # avoid considering last string in DOC1 and first string in DOC2 as adjacent
     for part in text_parts:
         for match in re.finditer(PAT, part):
             token_bytes_sequence = match.group(0).encode("utf-8")
@@ -594,6 +596,13 @@ def pretokenize(
             else:
                 dict_token_counts[token_bytes_tuple] = 1
     return dict_token_counts
+
+def _count_chunk(args):
+    input_path, start, end, special_tokens = args
+    with open(input_path, "rb") as f:
+        f.seek(start)
+        chunk = f.read(end - start).decode("utf-8", errors="ignore")
+    return Counter(_pretokenize(chunk, special_tokens))
 
 def run_train_bpe(
     input_path: str | os.PathLike,
@@ -632,19 +641,22 @@ def run_train_bpe(
         special_token_id += 1
 
     with open(input_path, "rb") as f:
-        num_processes = 4
+        num_processes = multiprocessing.cpu_count()
         boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
 
         # The following is a serial implementation, but you can parallelize this
         # by sending each start/end pair to a set of processes.
         global_counts: Counter[tuple[bytes], int] = Counter()
-        for start, end in zip(boundaries[:-1], boundaries[1:]): # (0, b1), (b1, b2), ..., (bN-1, file_size)
-            f.seek(start)
-            chunk = f.read(end - start).decode("utf-8", errors="ignore")
-            # Run pre-tokenization on your chunk and store the counts for each pre-token
-            pretokenized_chunk_counts: dict[tuple[bytes], int] = pretokenize(chunk, special_tokens)
-            global_counts.update(pretokenized_chunk_counts)
-        
+        chunk_args = [
+            (input_path, start, end, special_tokens)
+            for start, end in zip(boundaries[:-1], boundaries[1:])
+        ]
+
+        with multiprocessing.Pool(processes=num_processes) as pool:
+            chunk_counters = pool.map(_count_chunk, chunk_args)
+            for counter in chunk_counters:
+                global_counts.update(counter)
+            
         # Compute BPE merges from global_counts
         merges: list[tuple[bytes, bytes]] = []
         pair_counts: Counter[tuple[bytes, bytes], int] = Counter()
