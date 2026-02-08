@@ -1,5 +1,8 @@
 import torch
 import torch.nn as nn
+from jaxtyping import Bool, Float, Int
+from torch import Tensor
+from einops import rearrange, einsum
 
 class Linear(nn.Module):
     def __init__(self, 
@@ -18,7 +21,7 @@ class Linear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         # store
-        self.weight = nn.Parameter(torch.empty((in_features, out_features), device=device, dtype=dtype))
+        self.weight: Float[Tensor, "d_in d_out"] = nn.Parameter(torch.empty((in_features, out_features), device=device, dtype=dtype))
         std: float = (2 / (in_features + out_features)) ** 0.5
         nn.init.trunc_normal_(self.weight, mean=0.0, std=std, a=-3*std, b=3*std)
 
@@ -27,5 +30,6 @@ class Linear(nn.Module):
         """
         Apply the linear transformation to the input
         """
-        return x @ self.weight
+        result = einsum(x, self.weight, "... in_features, in_features out_features -> ... out_features")
+        return result
 
