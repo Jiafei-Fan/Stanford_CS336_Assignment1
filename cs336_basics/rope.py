@@ -29,7 +29,7 @@ class RotaryPositionalEmbedding(nn.Module):
         
     def forward(self, x: Float[Tensor, "... seq_len d_k"], token_positions: Int[Tensor, "... seq_len"]) -> Float[Tensor, "... seq_len d_k"]:
         """
-        
+        Process an input tensor of shape (..., seq_len, d_k) and return a tensor of the same shape with RoPE applied.
         """
         # get the sin and cos values for the token positions from the cache
         sin: Float[Tensor, "... seq_len d_kd2"] = self.sin_cache[token_positions.long()]
@@ -46,9 +46,3 @@ class RotaryPositionalEmbedding(nn.Module):
         # interleave back to (..., seq_len, d_k)
         out: Float[Tensor, "... seq_len d_k"] = torch.stack((out_even, out_odd), dim=-1).reshape(*x.shape)
         return out
-
-
-
-
-
-

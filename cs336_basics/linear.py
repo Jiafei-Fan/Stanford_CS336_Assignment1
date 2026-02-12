@@ -26,7 +26,7 @@ class Linear(nn.Module):
         nn.init.trunc_normal_(self.weight, mean=0.0, std=std, a=-3*std, b=3*std)
 
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Float[Tensor, "... d_in"]) -> torch.Tensor:
         """
         Apply the linear transformation to the input
         """

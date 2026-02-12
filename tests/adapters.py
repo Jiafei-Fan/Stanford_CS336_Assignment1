@@ -18,6 +18,7 @@ from cs336_basics.positionwise_feedforward import PositionwiseFeedForward
 from cs336_basics.rope import RotaryPositionalEmbedding
 from cs336_basics.softmax import softmax
 from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
+from cs336_basics.multi_head_self_attention import MultiHeadSelfAttention
 
 def run_linear(
     d_in: int,
@@ -132,7 +133,7 @@ def run_scaled_dot_product_attention(
 def run_multihead_self_attention(
     d_model: int,
     num_heads: int,
-    q_proj_weight: Float[Tensor, " d_k d_in"],
+    q_proj_weight: Float[Tensor, " d_k d_in"], # it's actually "num_heads * d_k d_in"
     k_proj_weight: Float[Tensor, " d_k d_in"],
     v_proj_weight: Float[Tensor, " d_v d_in"],
     o_proj_weight: Float[Tensor, " d_model d_v"],
@@ -160,7 +161,15 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    with torch.no_grad():
+        multi_head_self_attention: MultiHeadSelfAttention = MultiHeadSelfAttention(d_model, num_heads)
+        multi_head_self_attention.load_state_dict({
+            "w_q.weight": q_proj_weight.T,
+            "w_k.weight": k_proj_weight.T,
+            "w_v.weight": v_proj_weight.T,
+            "w_o.weight": o_proj_weight.T
+        })
+    return multi_head_self_attention.forward(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -200,7 +209,15 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    with torch.no_grad():
+        multi_head_self_attention: MultiHeadSelfAttention = MultiHeadSelfAttention(d_model, num_heads)
+        multi_head_self_attention.load_state_dict({
+            "w_q.weight": q_proj_weight.T,
+            "w_k.weight": k_proj_weight.T,
+            "w_v.weight": v_proj_weight.T,
+            "w_o.weight": o_proj_weight.T
+        })
+    return multi_head_self_attention.forward(in_features, token_positions, theta, max_seq_len)
 
 
 def run_rope(
