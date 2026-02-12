@@ -102,9 +102,9 @@ def run_swiglu(
     # swiglu.w3.weight.data = w3_weight
     swiglu: PositionwiseFeedForward = PositionwiseFeedForward(d_model, d_ff)
     swiglu.load_state_dict({
-        "w1": w1_weight,
-        "w2": w2_weight,
-        "w3": w3_weight
+        "w1.weight": w1_weight.T,
+        "w2.weight": w2_weight.T,
+        "w3.weight": w3_weight.T
     })
     return swiglu.forward(in_features)
 
