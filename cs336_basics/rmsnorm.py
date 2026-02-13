@@ -32,6 +32,6 @@ class RMSNorm(nn.Module):
         x_f = x.to(torch.float32)
         mean_square = x_f.pow(2).mean(dim=-1, keepdim=True)
         x_normed: Float[Tensor, "batch_size sequence_length d_model"] = x_f / torch.sqrt(mean_square + self.eps)
-        result = einsum(x_normed, self.weight, "... d_model, d_model -> ... d_model")
+        result = einsum(x_normed, self.weight, "... d_model, d_model -> ... d_model") # element-wise multiplication here
         return result.to(in_dtype)
         

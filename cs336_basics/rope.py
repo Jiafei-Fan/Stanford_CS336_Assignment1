@@ -3,7 +3,10 @@ import torch.nn as nn
 from jaxtyping import Float, Int
 from torch import Tensor
 from einops import einsum
-
+# rope do a rotation on each pair of even and odd dimensions of the input, 
+# where the rotation angle is determined by the position of the token i in the sequence and a base angle theta. 
+# and k
+# The sin and cos values for each position and dimension are precomputed and stored in buffers for efficiency.
 class RotaryPositionalEmbedding(nn.Module):
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None) -> None:
         """
@@ -17,6 +20,9 @@ class RotaryPositionalEmbedding(nn.Module):
         self.d_k = d_k
         self.max_seq_len = max_seq_len
         # create/precompute sin_cache and cos_cache tensor with shape i*k where i is max_seq_len and k is d_kd2
+        # d_kd2 means d_k // 2, d_k will be number of dimensions for the each head's query/key vectors,
+        # pairwise rotation is applied to each even and odd dimension
+        # e.g if d_k = 6, we have dimensions [0,1,2,3,4,5], we will apply rotation to (0,1), (2,3), (4,5) pairs
         k_idx: Float[Tensor, "d_kd2"] = torch.arange(self.d_k // 2, device=device, dtype=torch.float32)
         k_idx: Float[Tensor, "d_kd2"] = 1 / (theta ** (2 * k_idx / self.d_k))
         position: Float[Tensor, "seq_len"] = torch.arange(max_seq_len, device=device)
