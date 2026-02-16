@@ -20,6 +20,7 @@ from cs336_basics.softmax import softmax
 from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
 from cs336_basics.multi_head_self_attention import MultiHeadSelfAttention
 from cs336_basics.transformer_block import TransformerBlock
+from cs336_basics.transformer_lm import TransformerLM
 
 def run_linear(
     d_in: int,
@@ -164,10 +165,14 @@ def run_multihead_self_attention(
     """
     with torch.no_grad():
         multi_head_self_attention: MultiHeadSelfAttention = MultiHeadSelfAttention(d_model, num_heads)
+        # multi_head_self_attention.load_state_dict({
+        #     "w_q.weight": q_proj_weight.T,
+        #     "w_k.weight": k_proj_weight.T,
+        #     "w_v.weight": v_proj_weight.T,
+        #     "w_o.weight": o_proj_weight.T
+        # })
         multi_head_self_attention.load_state_dict({
-            "w_q.weight": q_proj_weight.T,
-            "w_k.weight": k_proj_weight.T,
-            "w_v.weight": v_proj_weight.T,
+            "w_qkv.weight": torch.cat([q_proj_weight.T, k_proj_weight.T, v_proj_weight.T], dim=-1),
             "w_o.weight": o_proj_weight.T
         })
     return multi_head_self_attention.forward(in_features)
@@ -178,10 +183,10 @@ def run_multihead_self_attention_with_rope(
     num_heads: int,
     max_seq_len: int,
     theta: float,
-    q_proj_weight: Float[Tensor, " d_k d_in"],
-    k_proj_weight: Float[Tensor, " d_k d_in"],
-    v_proj_weight: Float[Tensor, " d_v d_in"],
-    o_proj_weight: Float[Tensor, " d_model d_v"],
+    q_proj_weight: Float[Tensor, " d_k d_in"], # it's actually "num_heads * d_k d_in"
+    k_proj_weight: Float[Tensor, " d_k d_in"], # it's actually "num_heads * d_k d_in"
+    v_proj_weight: Float[Tensor, " d_v d_in"], # it's actually "num_heads * d_v d_in"
+    o_proj_weight: Float[Tensor, " d_model d_v"], # it's actually "d_model d_model"
     in_features: Float[Tensor, " ... sequence_length d_in"],
     token_positions: Int[Tensor, " ... sequence_length"] | None = None,
 ) -> Float[Tensor, " ... sequence_length d_out"]:
@@ -210,12 +215,19 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
+    # with torch.no_grad():
+    #     multi_head_self_attention: MultiHeadSelfAttention = MultiHeadSelfAttention(d_model, num_heads)
+    #     multi_head_self_attention.load_state_dict({
+    #         "w_q.weight": q_proj_weight.T,
+    #         "w_k.weight": k_proj_weight.T,
+    #         "w_v.weight": v_proj_weight.T,
+    #         "w_o.weight": o_proj_weight.T
+    #     })
+    # return multi_head_self_attention.forward(in_features, token_positions, theta, max_seq_len)
     with torch.no_grad():
         multi_head_self_attention: MultiHeadSelfAttention = MultiHeadSelfAttention(d_model, num_heads)
         multi_head_self_attention.load_state_dict({
-            "w_q.weight": q_proj_weight.T,
-            "w_k.weight": k_proj_weight.T,
-            "w_v.weight": v_proj_weight.T,
+            "w_qkv.weight": torch.cat([q_proj_weight.T, k_proj_weight.T, v_proj_weight.T], dim=-1),
             "w_o.weight": o_proj_weight.T
         })
     return multi_head_self_attention.forward(in_features, token_positions, theta, max_seq_len)
@@ -415,7 +427,31 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    transformer_lm = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta
+    )
+    transformer_lm.load_state_dict({
+        "token_embeddings.weight": weights["token_embeddings.weight"],
+        "final_rmsnorm.weight": weights["ln_final.weight"],
+        "output_projection.weight": weights["lm_head.weight"].T,
+        **{f"transformer_blocks.{i}.self_attn.w_q.weight": weights[f"layers.{i}.attn.q_proj.weight"].T for i in range(num_layers)},
+        **{f"transformer_blocks.{i}.self_attn.w_k.weight": weights[f"layers.{i}.attn.k_proj.weight"].T for i in range(num_layers)},
+        **{f"transformer_blocks.{i}.self_attn.w_v.weight": weights[f"layers.{i}.attn.v_proj.weight"].T for i in range(num_layers)},
+        **{f"transformer_blocks.{i}.self_attn.w_o.weight": weights[f"layers.{i}.attn.output_proj.weight"].T for i in range(num_layers)},
+        **{f"transformer_blocks.{i}.rmsnorm1.weight": weights[f"layers.{i}.ln1.weight"] for i in range(num_layers)},
+        **{f"transformer_blocks.{i}.ffn.w1.weight": weights[f"layers.{i}.ffn.w1.weight"].T for i in range(num_layers)},
+        **{f"transformer_blocks.{i}.ffn.w2.weight": weights[f"layers.{i}.ffn.w2.weight"].T for i in range(num_layers)},
+        **{f"transformer_blocks.{i}.ffn.w3.weight": weights[f"layers.{i}.ffn.w3.weight"].T for i in range(num_layers)},
+        **{f"transformer_blocks.{i}.rmsnorm2.weight": weights[f"layers.{i}.ln2.weight"] for i in range(num_layers)},
+    })
+    print([k for k in transformer_lm.state_dict().keys() if k.startswith("transformer_blocks.")][:20])
+    return transformer_lm(in_indices)
 
 
 def run_rmsnorm(
