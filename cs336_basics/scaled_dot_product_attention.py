@@ -23,12 +23,13 @@ def scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    # score
+    # 1st matmul: score
     qk: Float[Tensor, "... queries keys"] = einsum(Q, K, "... queries d_k, ... keys d_k -> ... queries keys")
     sqrt_dk = Q.shape[-1] ** 0.5
     scaled_qk = qk / sqrt_dk
     if mask is not None:
         scaled_qk = torch.where(mask, scaled_qk, torch.tensor(float("-inf"), device=scaled_qk.device, dtype=scaled_qk.dtype))
     softmax_qk: Float[Tensor, "... queries keys"] = softmax(scaled_qk, dim=-1)
+    # 2nd matmul: score and value
     output: Float[Tensor, "... queries d_v"] = einsum(softmax_qk, V, "... queries keys, ... keys d_v -> ... queries d_v")
     return output

@@ -25,7 +25,7 @@ class Embedding(nn.Module):
         std: float = 1.0 / (embedding_dim ** 0.5)
         nn.init.trunc_normal_(self.weight, mean=0.0, std=std, a=-3*std, b=3*std)
 
-    def forward(self, token_ids: Int64[Tensor, "batch_size sequence_length"]) -> Float[Tensor, "d_model"]:
+    def forward(self, token_ids: Int64[Tensor, "..."]) -> Float[Tensor, "... d_model"]:
         """
         Lookup the embedding vectors for the given
         """
