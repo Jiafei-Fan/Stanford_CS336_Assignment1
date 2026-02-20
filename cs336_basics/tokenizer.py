@@ -27,7 +27,15 @@ class Tokenizer:
                 line = line.rstrip("\n")
                 if not line:
                     continue
-                a_str, b_str = line.split(" ")
+                char_list:list[str] = [i for i in line]
+                if char_list[0] == " ":
+                    for i in range(1, len(char_list)):
+                        if char_list[i] == " ":
+                            a_str = "".join(char_list[0:i])
+                            b_str = "".join(char_list[i+1:])
+                            break
+                else:
+                    a_str, b_str = line.split(" ", 1)
                 merges.append((a_str.encode("latin-1"), b_str.encode("latin-1")))
 
         return cls(vocab=vocab, merges=merges, special_tokens=special_tokens)
